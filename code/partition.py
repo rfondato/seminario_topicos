@@ -19,7 +19,7 @@ import pyspark.sql.functions as F
 
 threshold = 1607
 
-ad = load_accelerometer_data(spark, '../data/WISDM_at_v2.0_raw.txt')
+ad = load_accelerometer_data(spark, '/data/WISDM_at_v2.0_raw.txt')
 
 # Partition training data
 ad.filter(F.col("userId") <= F.lit(threshold))\
@@ -28,7 +28,7 @@ ad.filter(F.col("userId") <= F.lit(threshold))\
     .option("header", True)\
     .partitionBy("userId", "action")\
     .mode("overwrite")\
-    .parquet('../data/partitioned/training')
+    .parquet('/data/partitioned/training')
 
 # Partition testing data
 ad.filter(F.col("userId") > F.lit(threshold))\
@@ -37,4 +37,4 @@ ad.filter(F.col("userId") > F.lit(threshold))\
     .option("header", True)\
     .partitionBy("userId", "action")\
     .mode("overwrite")\
-    .parquet('../data/partitioned/testing')
+    .parquet('/data/partitioned/testing')

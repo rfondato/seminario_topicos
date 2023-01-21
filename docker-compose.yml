@@ -3,7 +3,7 @@ services:
   
   master:
     container_name: master
-    image: arjones/pyspark:2.4.5
+    image: rfondato/spark-3.3.1
     restart: always
     command: ["/opt/spark/sbin/start-master.sh"]
     environment:
@@ -20,9 +20,9 @@ services:
 
   worker1:
     container_name: worker1
-    image: arjones/pyspark:2.4.5
+    image: rfondato/spark-3.3.1
     restart: always
-    command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "512m", "--cores", "2"]
+    command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "2g", "--cores", "3"]
     environment:
       MASTER: spark://master:7077
       SPARK_NO_DAEMONIZE: 1
@@ -39,9 +39,9 @@ services:
 
   worker2:
     container_name: worker2
-    image: arjones/pyspark:2.4.5
+    image: rfondato/spark-3.3.1
     restart: always
-    command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "512m", "--cores", "2"]
+    command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "2g", "--cores", "3"]
     environment:
       MASTER: spark://master:7077
       SPARK_NO_DAEMONIZE: 1
@@ -58,7 +58,7 @@ services:
 
   jupyter:
     container_name: jupyter
-    image: arjones/pyspark:2.4.5
+    image: rfondato/spark-3.3.1
     restart: always
     environment:
       MASTER: spark://master:7077
@@ -70,3 +70,49 @@ services:
       - ./code:/notebook
       - ./data:/data
       - ./code:/app
+
+  postgres-airflow:
+      container_name: postgres-airflow
+      image: postgres:11
+      restart: always
+      volumes:
+        - postgres-airflow-data:/var/lib/postgresql/data
+      environment:
+        POSTGRES_DB: airflow
+        POSTGRES_USER: airflow
+        POSTGRES_PASSWORD: airflow
+      ports:
+        - "5434:5432"
+
+  airflow:
+    container_name: airflow
+    image: rfondato/airflow_spark
+    restart: always
+    depends_on:
+      - postgres-airflow
+    environment:
+      EXECUTOR: Local
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__WEB_SERVER_PORT: 9090
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres-airflow:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: "Eff80poJxv6LE4432pDC6OmD6N449KCSuhUAMLXiq4U="
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./airflow/dags:/usr/local/airflow/dags
+      - ./code:/app
+      - ./data:/data
+  
+  mlflow:
+    container_name: mlflow_server
+    image: rfondato/mlflow
+    restart: always
+    build: ./mlflow
+    ports:
+        - "5000:5000"
+    command: mlflow server --backend-store-uri /tracking --host 0.0.0.0
+    volumes:
+      - ./mlflow/tracking:/tracking
+
+volumes:
+  postgres-airflow-data:

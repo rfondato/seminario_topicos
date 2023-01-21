@@ -2,19 +2,17 @@
 
 function stop {
   echo "Stopping and removing containers"
-  docker-compose --project-name wksp down
+  docker-compose --project-name tp-seminario-rodrigo down
 }
 
 function cleanup {
   echo "Removing volume"
-  docker volume rm wksp_postgres-data
-  docker volume rm wksp_superset
-  docker volume rm wksp_postgres-airflow-data
+  docker volume rm tp-seminario-rodrigo_postgres-airflow-data
 }
 
 function start {
   echo "Starting up"
-  docker-compose --project-name wksp up -d
+  docker-compose --project-name tp-seminario-rodrigo up -d
 }
 
 function update {
@@ -22,7 +20,7 @@ function update {
   git pull --all
 
   echo "Updating docker images ..."
-  docker-compose --project-name wksp pull
+  docker-compose --project-name tp-seminario-rodrigo pull
 
   echo "You probably should restart"
 }
@@ -37,25 +35,6 @@ function token {
   echo 'Your TOKEN for Jupyter Notebook is:'
   SERVER=$(docker exec -it jupyter jupyter notebook list)
   echo "${SERVER}" | grep '/notebook' | sed -E 's/^.*=([a-z0-9]+).*$/\1/'
-}
-
-function superset-init {
-  echo 'Initializing Superset database using sqlite'
-  docker exec -it superset superset-init
-}
-
-function superset-start {
-  echo 'Starting Superset container'
-  docker container start superset
-}
-
-function superset-stop {
-  echo 'Stopping Superset container'
-  docker container stop superset
-}
-
-function psql {
-  docker exec -it postgres psql -U workshop workshop
 }
 
 case $1 in
@@ -78,27 +57,11 @@ case $1 in
     ;;
 
   logs )
-  docker-compose --project-name wksp logs -f
+  docker-compose --project-name tp-seminario-rodrigo logs -f
     ;;
 
   token )
   token
-    ;;
-
-  superset-start )
-  superset-start
-    ;;
-  
-  superset-stop )
-  superset-stop
-    ;;
-
-  superset-init )
-  superset-init
-    ;;
-
-  psql )
-  psql
     ;;
 
   * )
