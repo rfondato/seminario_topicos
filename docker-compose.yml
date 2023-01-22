@@ -3,7 +3,7 @@ services:
   
   master:
     container_name: master
-    image: rfondato/spark-3.3.1
+    image: rfondato/pyspark:3.3.1
     restart: always
     command: ["/opt/spark/sbin/start-master.sh"]
     environment:
@@ -17,10 +17,11 @@ services:
     volumes:
       - ./code:/app
       - ./data:/data
+      - ./model:/model
 
   worker1:
     container_name: worker1
-    image: rfondato/spark-3.3.1
+    image: rfondato/pyspark:3.3.1
     restart: always
     command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "2g", "--cores", "3"]
     environment:
@@ -36,10 +37,11 @@ services:
     volumes:
       - ./code:/app
       - ./data:/data
+      - ./model:/model
 
   worker2:
     container_name: worker2
-    image: rfondato/spark-3.3.1
+    image: rfondato/pyspark:3.3.1
     restart: always
     command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "2g", "--cores", "3"]
     environment:
@@ -55,10 +57,11 @@ services:
     volumes:
       - ./code:/app
       - ./data:/data
+      - ./model:/model
 
   jupyter:
     container_name: jupyter
-    image: rfondato/spark-3.3.1
+    image: rfondato/jupyter
     restart: always
     environment:
       MASTER: spark://master:7077
@@ -67,7 +70,7 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      - ./code:/notebook
+      - ./notebook:/notebook
       - ./data:/data
       - ./code:/app
 
@@ -86,7 +89,7 @@ services:
 
   airflow:
     container_name: airflow
-    image: rfondato/airflow_spark
+    image: rfondato/airflow-spark
     restart: always
     depends_on:
       - postgres-airflow
@@ -102,6 +105,7 @@ services:
       - ./airflow/dags:/usr/local/airflow/dags
       - ./code:/app
       - ./data:/data
+      - ./model:/model
   
   mlflow:
     container_name: mlflow_server
@@ -110,9 +114,21 @@ services:
     build: ./mlflow
     ports:
         - "5000:5000"
-    command: mlflow server --backend-store-uri /tracking --host 0.0.0.0
+    command: mlflow server --host 0.0.0.0
     volumes:
-      - ./mlflow/tracking:/tracking
+      - ./mlruns:/mlruns
+      - ./mlartifacts:/mlartifacts
+
+  kafka:
+    container_name: kafka
+    image: spotify/kafka
+    restart: always
+    ports:
+      - "2181:2181"
+      - "9092:9092"
+    environment:
+      ADVERTISED_HOST: kafka
+      ADVERTISED_PORT: 9092
 
 volumes:
   postgres-airflow-data:
