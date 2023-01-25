@@ -1,4 +1,4 @@
-FROM openjdk:11-jre-slim
+FROM python:3.7-slim-buster
 
 WORKDIR /app
 
@@ -8,9 +8,11 @@ ARG HADOOP_VERSION=3
 
 ENV SPARK_HOME /opt/spark
 
-# Install java + spark
+# Install spark
 RUN apt-get update && \
-  apt-get install -y wget ca-certificates procps && \
+  apt install -y ca-certificates procps openjdk-11-jre-headless scala wget && \
+  export JAVA_HOME='/usr/lib/jvm/java-11-openjdk-amd64' && \
+  export PATH=$PATH:$JAVA_HOME/bin && \
   wget https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz -O - | tar zx -C /opt && \
   mv /opt/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}/ /opt/spark/ && \
   echo "\nexport PATH=\${PATH}:/opt/spark/bin" >> /etc/bash.bashrc && \
@@ -20,14 +22,9 @@ RUN apt-get update && \
 COPY requirements.txt /tmp/
 
 # Install everything needed for pyspark
-RUN apt-get update && \
-  apt-get --no-install-recommends --no-install-suggests install -y \
-  python3 python3-pip python3-setuptools python3-distutils && \
-  update-alternatives --install /usr/bin/python python /usr/bin/python3 10 && \
-  pip3 install --no-cache-dir --default-timeout=120 -r /tmp/requirements.txt && \
+RUN pip install --no-cache-dir --default-timeout=120 -r /tmp/requirements.txt && \
   pip install pyspark==${SPARK_VERSION} && \
-  apt-get autoremove -y && \
-  rm -rvf /tmp/requirements.txt /var/lib/apt/lists/*
+  rm -rvf /tmp/requirements.txt
 
 CMD ["/opt/spark/bin/spark-shell"]
 

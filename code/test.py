@@ -36,7 +36,7 @@ predictions_and_labels = predictions.select("prediction", "label").rdd.map(lambd
 metrics = MulticlassMetrics(predictions_and_labels)
 
 # Create the experiment on mlFlow local server
-mlflow.set_tracking_uri("http://localhost:5000")
+mlflow.set_tracking_uri("http://mlflow_server:5000")
 experiment = mlflow.set_experiment("TP Seminario - HAR")
 
 now_str = datetime.now().strftime("%m/%d/%Y %H:%M:%S")

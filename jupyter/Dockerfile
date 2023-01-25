@@ -1,4 +1,4 @@
-FROM rfondato/spark:3.3.1
+FROM rfondato/pyspark:3.3.1
 
 WORKDIR /notebook
 

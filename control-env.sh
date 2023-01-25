@@ -15,6 +15,19 @@ function start {
   docker-compose --project-name tp-seminario-rodrigo up -d
 }
 
+function createImages {
+  echo "Creating custom local images"
+  echo "Creating rfondato/pyspark:3.3.1 ..."
+  docker build ./pyspark/ -f ./pyspark/Dockerfile -t rfondato/pyspark:3.3.1
+  echo "Creating rfondato/airflow-spark ..."
+  docker build ./airflow/ -f ./airflow/Dockerfile -t rfondato/airflow-spark
+  echo "Creating rfondato/jupyter ..."
+  docker build ./jupyter/ -f ./jupyter/Dockerfile -t rfondato/jupyter
+  echo "Creating rfondato/mlflow"
+  docker build ./mlflow/ -f ./mlflow/Dockerfile -t rfondato/mlflow
+  echo "Finished creating images. Please run './control-env.sh start' to run the containers"
+}
+
 function update {
   echo "Updating code ..."
   git pull --all
@@ -47,6 +60,10 @@ case $1 in
   stop
     ;;
 
+  create-images )
+  createImages
+    ;;
+
   cleanup )
   stop
   cleanup
@@ -65,7 +82,7 @@ case $1 in
     ;;
 
   * )
-  printf "ERROR: Missing command\n  Usage: `basename $0` (start|stop|cleanup|token|logs|update|superset-start|superset-stop|superset-init)\n"
+  printf "ERROR: Missing command\n  Usage: `basename $0` (start|stop|cleanup|token|logs|update|create-images)\n"
   exit 1
     ;;
 esac

@@ -3,8 +3,16 @@ from airflow.models import DAG
 from airflow.operators.bash_operator import BashOperator
 from datetime import datetime
 
-default_args = {'owner': 'rFondato', 'retries': 0, 'start_date': datetime(2023, 1, 18)}
-with DAG('train-model', default_args=default_args, schedule_interval='0 0 * * *') as dag:
+default_args = {
+    'owner': 'rFondato', 
+    'retries': 0,
+    'start_date': datetime(2023, 1, 22)
+    }
+with DAG('train-model', 
+          default_args=default_args,
+          max_active_runs=1,
+          catchup=False,
+          schedule_interval='0 0 * * *') as dag:
     partition_data = BashOperator(
         task_id='partition_data',
         bash_command="/opt/spark/bin/spark-submit --master 'spark://master:7077' --executor-memory 2g /app/partition.py"

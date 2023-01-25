@@ -243,7 +243,7 @@ class HARPipelineBuilder:
         self.epochs = epochs
 
     def build(self):
-        str_indexer = StringIndexer(inputCol="action", outputCol="label")
+        str_indexer = StringIndexer(inputCol="action", outputCol="label", handleInvalid="keep")
         filter_nulls = FilterNulls()
         cap_values = CapValues(inputCols=["x", "y", "z"], threshold=self.cap)
         events_separator = EventSeparator(inputCol="action", outputCol="event", partitionBy=["userId"], orderBy=["timestamp"])
@@ -254,7 +254,7 @@ class HARPipelineBuilder:
         vector_assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
         scaler = MinMaxScaler(inputCol="features", outputCol="features_scaled")
         rows_selector = RowsSelector(step = self.step, partitionBy=["userId", "event"], orderBy=["timestamp"])
-        estimator = create_estimator(self.features_size * 3, hidden_layer=self.hidden_layer, n_classes=self.n_classes, featuresCol="features_scaled")
+        estimator = create_estimator(self.features_size * 3, hidden_layer=self.hidden_layer, n_classes=self.n_classes, epochs=self.epochs, featuresCol="features_scaled")
         
         return Pipeline(stages=[filter_nulls, # Get rid of rows with nulls
                                 str_indexer, # Convert actions to labels

@@ -1,0 +1,3 @@
+findspark 
+mlflow==1.25.1 
+protobuf==3.20.0

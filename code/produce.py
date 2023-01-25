@@ -2,23 +2,34 @@
 
 import findspark
 from pyspark.sql import SparkSession
-from load import load_accelerometer_data
+from load import load_stream
 import pyspark.sql.functions as F
+
+KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
+KAFKA_TOPIC = "HAR"
 
 findspark.init()
 
 spark = (
     SparkSession.builder
-    .appName("Human Activity Recognition")
+    .appName("TP Seminario - Kafka Producer")
     .getOrCreate()
 )
 
-unlabeled_data = load_accelerometer_data(spark, '../data/WISDM_at_v2.0_unlabeled_raw.txt')
+    #.withColumn("value", F.encode(F.col("value"), "iso-8859-1").cast("binary"))\
+    #.withColumn("key", F.encode(F.col("key"), "iso-8859-1").cast("binary"))\
 
-random_row = unlabeled_data.sample(False, 0.001).limit(1).collect()
-userId = random_row[0][0]
-timestamp = random_row[0][2]
-
-to_predict = unlabeled_data.filter((F.col("userid") == F.lit(userId)) & (F.lit(timestamp) <= F.col("timestamp")) & (F.col("timestamp") <= F.lit(timestamp + 10000)))
+# Read from real_time parquet table (which will be populated by sample) as a stream,
+# and write to the HAR kafka topic
+load_stream(spark, '/data/real_time')\
+    .withColumn("value", F.to_json(F.struct(F.col("*")) ) )\
+    .withColumn("key", F.col("timestamp").cast("string"))\
+    .writeStream\
+    .format("kafka")\
+    .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)\
+    .option("topic", KAFKA_TOPIC)\
+    .option("checkpointLocation", "/data/checkpoint/producer")\
+    .start()\
+    .awaitTermination()
 
 # %%

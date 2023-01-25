@@ -10,6 +10,15 @@ def get_accelerometer_schema():
         .add("y", DoubleType(), True)\
         .add("z", StringType(), True)
 
+def get_realtime_schema():
+    return StructType()\
+        .add("userId", IntegerType(), True)\
+        .add("action", StringType(), True)\
+        .add("timestamp", LongType(), True)\
+        .add("x", DoubleType(), True)\
+        .add("y", DoubleType(), True)\
+        .add("z", DoubleType(), True)
+
 def get_demographic_schema():
     return StructType()\
         .add("userId", IntegerType(), True)\
@@ -28,3 +37,6 @@ def load_demographic_data(sparkSession, file):
 
 def load_partitioned_data(sparkSession, base, partitions):
     return sparkSession.read.parquet(base).coalesce(partitions)
+
+def load_stream(sparkSession, file):
+    return sparkSession.readStream.schema(get_realtime_schema()).parquet(file)
