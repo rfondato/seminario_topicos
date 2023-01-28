@@ -4,12 +4,12 @@ from pyspark import keyword_only
 from pyspark.ml import Transformer
 from pyspark.ml.param.shared import HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Param, Params, TypeConverters
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable  
-from pyspark.sql.functions import col, udf, lag, sum, avg, rank, lit
-from pyspark.sql.types import FloatType
+import pyspark.sql.functions as F
+from pyspark.sql.types import FloatType, DoubleType
 from pyspark.sql import Window
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler, MinMaxScaler, StringIndexer, PCA
-from itertools import product
+from itertools import product, chain
 
 
 class FilterNulls(Transformer, DefaultParamsReadable, DefaultParamsWritable):
@@ -64,7 +64,7 @@ class CapValues(Transformer, HasInputCols, DefaultParamsReadable, DefaultParamsW
         threshold = self.getThreshold()
         inputCols = self.getInputCols()
 
-        cap_value = udf(lambda x: threshold if x > threshold else -threshold if x < -threshold else x, FloatType())
+        cap_value = F.udf(lambda x: threshold if x > threshold else -threshold if x < -threshold else x, FloatType())
 
         output = dataset
         for c in inputCols:
@@ -112,14 +112,14 @@ class EventSeparator (Transformer, HasInputCol, HasOutputCol, DefaultParamsReada
         inputCol = self.getInputCol()
         outputCol = self.getOutputCol()
 
-        mywindow = Window.partitionBy([col(x) for x in partitionBy])\
-            .orderBy([col(x) for x in orderBy])
+        mywindow = Window.partitionBy([F.col(x) for x in partitionBy])\
+            .orderBy([F.col(x) for x in orderBy])
 
         return dataset\
-            .withColumn("indicator", (col(inputCol) != lag(inputCol).over(mywindow)).cast("int"))\
+            .withColumn("indicator", (F.col(inputCol) != F.lag(inputCol).over(mywindow)).cast("int"))\
             .fillna(0, subset=[ "indicator"])\
-            .withColumn(outputCol, sum(col("indicator")).over(mywindow.rangeBetween(Window.unboundedPreceding, 0)))\
-            .drop(col("indicator"))
+            .withColumn(outputCol, F.sum(F.col("indicator")).over(mywindow.rangeBetween(Window.unboundedPreceding, 0)))\
+            .drop(F.col("indicator"))
 
 class FeaturesGenerator (Transformer, HasInputCols, DefaultParamsReadable, DefaultParamsWritable):
     """
@@ -176,15 +176,15 @@ class FeaturesGenerator (Transformer, HasInputCols, DefaultParamsReadable, Defau
         inputCols = self.getInputCols()
         movingAvgPeriod = self.getMovingAvgPeriod()
 
-        w = Window.partitionBy([col(x) for x in partitionBy])\
-            .orderBy([col(x) for x in orderBy])
+        w = Window.partitionBy([F.col(x) for x in partitionBy])\
+            .orderBy([F.col(x) for x in orderBy])
 
         avgWindow = w.rowsBetween(-movingAvgPeriod, 0)
 
         for c in inputCols:
-            dataset = dataset.withColumn(c, avg(col(c)).over(avgWindow))
+            dataset = dataset.withColumn(c, F.avg(F.col(c)).over(avgWindow))
 
-        lag_cols = [lag(col(c), i).over(w).alias(f"{c}_{i}") for (c,i) in product(inputCols, range(1, windowSize+1))]
+        lag_cols = [F.lag(F.col(c), i).over(w).alias(f"{c}_{i}") for (c,i) in product(inputCols, range(1, windowSize+1))]
 
         return dataset.select("*", *lag_cols)
 
@@ -234,10 +234,10 @@ class RowsSelector (Transformer, DefaultParamsReadable, DefaultParamsWritable):
         partitionBy = self.getPartitionBy()
         orderBy = self.getOrderBy()
 
-        w = Window.partitionBy([col(x) for x in partitionBy])\
-            .orderBy([col(x) for x in orderBy])
+        w = Window.partitionBy([F.col(x) for x in partitionBy])\
+            .orderBy([F.col(x) for x in orderBy])
 
-        return dataset.withColumn("rank", rank().over(w)).filter((col("rank") % lit(step)) == 0)
+        return dataset.withColumn("rank", F.rank().over(w)).filter((F.col("rank") % F.lit(step)) == 0)
 
 class ColumnsSelector (Transformer, HasOutputCols, DefaultParamsReadable, DefaultParamsWritable):
 
@@ -260,10 +260,52 @@ class ColumnsSelector (Transformer, HasOutputCols, DefaultParamsReadable, Defaul
     def _transform(self, dataset):
         return dataset.select(self.getOutputCols())
 
-from pyspark.ml.classification import MultilayerPerceptronClassifier
+class ClassWeightBalancer (Transformer, HasInputCol, HasOutputCol, DefaultParamsReadable, DefaultParamsWritable):
 
-def create_estimator(features_size, hidden_layer=64, n_classes = 6, epochs=100, featuresCol="features"):
-    return MultilayerPerceptronClassifier(layers=[features_size, hidden_layer, n_classes], seed=123, maxIter=epochs, featuresCol=featuresCol)
+    """
+        Create an output column with the weight of each class
+    """
+
+    @keyword_only
+    def __init__(self, inputCol="label", outputCol="weight"):
+        super(ClassWeightBalancer, self).__init__()
+        self._setDefault(inputCol="label", outputCol="weight")
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, inputCol="label", outputCol="weight"):
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _transform(self, dataset):
+        inputCol = self.getInputCol()
+        outputCol = self.getOutputCol()
+
+        count_by_label = dataset.select(inputCol).groupBy(inputCol).count().collect()
+        labels = [x[inputCol] for x in count_by_label]
+
+        # Short circuit if predicting no data
+        if len(labels) <= 0:
+            return dataset
+
+        counts = [x["count"] for x in count_by_label]
+        weights = [sum(counts) / c for c in counts] # Inverse of proportion
+        class_weights = {l: w for l, w in zip(labels, weights)}
+        
+        # Normalize weights, so that most frequent label has weight 1
+        min_weight = min(class_weights.values())
+        class_weights = {k: (class_weights[k] / min_weight) for k in class_weights.keys() }
+
+        # These 2 lines are taken from: https://danvatterott.com/blog/2019/11/18/balancing-model-weights-in-pyspark/
+        mapping_expr = F.create_map([F.lit(x) for x in chain(*class_weights.items())])
+        return dataset.withColumn(outputCol, mapping_expr.getItem(F.col(inputCol)))
+
+
+from pyspark.ml.classification import RandomForestClassifier
+
+def create_estimator(numTrees=20, maxDepth=5, featuresCol="features", weightCol="weight"):
+    return RandomForestClassifier(numTrees=numTrees, maxDepth=maxDepth, featuresCol=featuresCol, weightCol=weightCol, seed=123)
 
 class HARPipelineBuilder:
 
@@ -277,27 +319,24 @@ class HARPipelineBuilder:
                 moving_avg_period = 20,
                 slide_between_windows = 20,
                 pca_components = 10,
-                hidden_layer = 64,
-                n_classes = 6,
-                epochs=100) -> None:
+                num_trees=20,
+                max_depth=5) -> None:
         """
             cap: Threshold to cap the input measures to. Default 20.
             features_size: Amount of previous values to use as features, for each row.
             moving_avg_period: Period of the moving avg to apply to the input measures.
             slide_between_windows: Select only one row every this value.
             pca_components: Select the first pca_components dimensions, after applying PCA.
-            hidden_layer: Size of the estimator's hidden layer.
-            n_classes: Size of the estimator's output layer. Should match the number of classes to predict.
-            epochs: Number of iterations used to train the estimator.
+            num_trees: Number of trees to use by the random forest estimator.
+            max_depth: Max depth of each tree used by the random forest estimator.
         """
         self.cap = cap
         self.features_size = features_size
         self.moving_avg_period = moving_avg_period
         self.step = slide_between_windows
         self.pca_k = pca_components
-        self.hidden_layer = hidden_layer
-        self.n_classes = n_classes
-        self.epochs = epochs
+        self.num_trees = num_trees
+        self.max_depth = max_depth
 
     def build(self):
         """
@@ -314,8 +353,9 @@ class HARPipelineBuilder:
         vector_assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
         pca = PCA(k=self.pca_k, inputCol="features", outputCol="features_PCA")
         scaler = MinMaxScaler(inputCol="features_PCA", outputCol="features_scaled")
-        #rows_selector = RowsSelector(step = self.step, partitionBy=["userId", "event"], orderBy=["timestamp"])
-        estimator = create_estimator(self.pca_k, hidden_layer=self.hidden_layer, n_classes=(self.n_classes+1), epochs=self.epochs, featuresCol="features_scaled")
+        rows_selector = RowsSelector(step = self.step, partitionBy=["userId", "event"], orderBy=["timestamp"])
+        class_balancer = ClassWeightBalancer(inputCol="label", outputCol="weight")
+        estimator = create_estimator(numTrees=self.num_trees, maxDepth=self.max_depth, featuresCol="features_scaled", weightCol="weight")
 
         return Pipeline(stages=[filter_nulls, # Get rid of rows with at least 1 null column
                                 str_indexer, # Convert actions to numeric labels for training
@@ -325,11 +365,12 @@ class HARPipelineBuilder:
                                 filter_nulls, # Get rid of rows that have null values on lagged columns (first feature_size cols per event)
                                 vector_assembler, # Make a "features" cols for ML training combining all lagged cols into a vector
                                 ColumnsSelector(outputCols=["userId", "timestamp", "event", "label", "features"]), # Select only needed cols
-                                #rows_selector, # Select only one row per contiguous "step" rows.
+                                rows_selector, # Select only one row per contiguous "step" rows.
                                 pca, # Apply PCA to reduce dimensionality of the feature vectors
                                 scaler, # Min Max scaling for the "features" vectors
                                 ColumnsSelector(outputCols=["userId", "timestamp", "label", "features_scaled"]), # Get rid of extra feature cols
-                                estimator # Neural Network to estimate the action performed by the user
+                                class_balancer, # Calculate weights of each class according to the frecuency over the dataset
+                                estimator # Random Forest estimator to predict the actions performed by the users
                                 ])
 
 # %%

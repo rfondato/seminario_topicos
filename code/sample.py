@@ -29,7 +29,7 @@ TIMESTAMP_RANGE = 10000
 
 # Using the random user Id and timestamp, take a range of 1 particular action to sample (10 posterior seconds)
 to_predict = unlabeled_data\
-    .filter((F.col("userid") == F.lit(userId)) & (F.lit(timestamp) <= F.col("timestamp")) & (F.col("timestamp") <= F.lit(timestamp + 10000)))\
+    .filter((F.col("userid") == F.lit(userId)) & (F.lit(timestamp) <= F.col("timestamp")) & (F.col("timestamp") <= F.lit(timestamp + TIMESTAMP_RANGE)))
 
 # Append samples to parquet real_time data
 to_predict\

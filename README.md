@@ -91,8 +91,8 @@ Se utilizaron como base las imágenes y archivos docker-compose.yml y control-en
 * **worker1, worker2:** Nodos worker de spark. Se reservan 3 GB de ram y 3 núcleos para cada worker.
 * **jupyter:** Nodo que corre spark en forma local + jupyter, para la ejecución de las notebooks que se encuentren en el directorio /notebook
     * En particular se encontrará una sola notebook eda.ipynb con el análisis de datos del dataset.
-    * El archivo load.py es un symbolic link al que se ubica dentro de /code, necesario para la ejecución de las notebooks.
     * Se podrá acceder a jupyter mediante **localhost:8888**
+    * Para acceder a una version ya renderizada de la notebook, acceder [acá](https://github.com/rfondato/seminario_topicos/blob/main/notebook/eda.ipynb)
 * **postgres-airflow:** Contenedor que posee una DB postgres para almacenar los datos correspondientes a ejecuciones de DAGs de airflow.
 * **airflow:** Contenedor con servidor de airflow, el webserver puede ser accedido mediante **localhost:9090**
 * **mlflow:** Contenedor con servidor local de mlflow, utilizado para registrar los experimentos y modelos. Se puede acceder a la UI mediante **localhost:5000**
@@ -141,11 +141,12 @@ Posee la siguiente estructura:
 * **create_consumer**: BashOperator. Paralelamente al paso anterior, se realiza un submit al nodo master de spark del archivo /app/consume.py, el cual lee en modo stream el tópico de kafka en micro batches (de 1 minuto) y procesa cada uno, cargando el modelo almacenado en /model/trained_pipeline y realizando predicciones sobre los datos entrantes, escribiendo en la carpeta /predictions/pred_batch_i las predicciones del batch i (userId, timestamp y acción predicha).
 
 <br />
+
+**Aclaración:** Este dag puede fallar si en forma temporal no se puede descargar las dependencias de org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1. Cada task intentará hacer un retry cada 2 minutos.
+
 Con estos 3 dags se simula un entrenamiento periódico de un modelo y posterior almacenamiento del mismo en mlflow, junto con sus métricas, y la utilización del último modelo entrenado para realizar predicciones en tiempo real sobre datos nuevos no etiquetados.
 
-<br />
-
-**Importante: Por limitaciones en la cantidad de recursos, se recomienda correr primero a mano el DAG de entrenamiento y testeo (apagando los otros dos) y, una vez terminado, encender los otros (sampleo y creación de productor/consumidor), que pueden quedar encendidos y correr cada 5 y 10 minutos de intervalo.**
+**Importante: Por limitaciones en la cantidad de recursos al levantar todos los contenedores de forma local, se recomienda correr primero a mano el DAG de entrenamiento y testeo (apagando los otros dos) y, una vez terminado, encender los otros (sampleo y creación de productor/consumidor), que pueden quedar encendidos y correr cada 5 y 10 minutos de intervalo.**
 
 ## Modelo:
 ------
@@ -171,10 +172,11 @@ El modelo es un Pipeline de spark, compuesto de transformers para preprocesar lo
 * **FeaturesGenerator:** Genera las features principales que se utilizaran para entrenar al modelo. Se realiza un smoothing de los valores de los acelerómetros utilizando una media móvil de período configurable, y se calcula por cada fila los x lags anteriores, agregandolos como columnas. Por ejemplo 100 valores anteriores de x,y,z, serán nuevas columnas x_1, x_2, ... y_10,y_11 ... etc.
 * **FilterNulls:** Se vuelven a filtrar filas con nulls, ya que las primeras rows de cada evento contendran nulls en algunas columnas de lag. Por ejemplo: Si se calculan 100 lags por row, las primeras 100 rows de cada evento tendran nulls en al menos una columna. La primera row 99 nulls, la segunda 98 nulls, etc.
 * **VectorAssembler:** Se toman todas las medidas de los acelerómetros y sus lags y se los convierte en un vector de features.
-* **ColumnSelector:** Se descartan columnas innecesarias para el entrenamiento/predicción, por ejemplo las columnas separadas de cada lag.
+* **ColumnSelector:** Se descartan columnas innecesarias para el entrenamiento/predicción, por ejemplo las columnas correspondientes a cada lag en particular.
+* **RowsSelector:** Por cada evento, toma una row cada "step" rows, es decir, es el slide de la ventana de lags. La idea es que no vale la pena entrenar con tantas rows que refieren al mismo evento (solo desplazando 50ms entre rows), porque son valores de entrada muy parecidos. Es mejor ir tomando por ejemplo ventanas de 5 segundos, desplazando de a 1 segundo por evento. Tampoco vale la pena predecir lo que hace un usuario cada 50ms, sino cada, por ejemplo, 1 segundo. Esto disminuye mucho el tamaño de los sets de entrenamiento y salidas a predecir.
 * **PCA:** Se realiza PCA con todas las columnas de lags de x,y,z quedándose con solo las primeras k componentes que explican la mayor cantidad de varianza.
 * **MinMaxScaler:** Se toma la salida de PCA y se escalan todos los valores entre 0 y 1.
 * **ColumnSelector:** Se vuelven a descartar columnas innecesarias. Solo quedan los features escalados.
-* **MultilayerPerceptronClassifier:** Estimador. Consiste en una red neuronal (MLP) con una capa de entrada de tamaño similar a la longitud del vector de features, una capa oculta configurable, y una capa de salida con 1 neurona por cada categoría a predecir.
-
+* **ClassWeightBalancer:** Las clases de entrada estan muy desbalanceadas segun el EDA. Este transformer agrega una columna "weight" al dataframe, cuyo valor es un numero real que representa el peso que hay que darle a cada clase, calculado como la frecuencia de esa clase sobre el total, y normalizado a la clase mas frecuente (el peso de la clase mas frecuente es 1).
+* **RandomForestClassifier:** Estimador que se entrena con "fit", y permite predecir una clase en datos nuevos de entrada con "transform". En este caso se utiliza random forest, configurando la cantidad de árboles y profundidad máxima de los mismos, por soportar multiclase y el agregado de la columna de pesos de clases.
 

@@ -21,7 +21,7 @@ with DAG('sample-data',
 
     sample = BashOperator(
         task_id='sample',
-        bash_command="/opt/spark/bin/spark-submit --master 'spark://master:7077' --conf spark.executor.memory=1g --conf spark.cores.max=2 /app/sample.py"
+        bash_command="/opt/spark/bin/spark-submit --master 'spark://master:7077' --conf spark.executor.memory=1g --conf spark.executor.cores=2 --conf spark.cores.max=2 /app/sample.py"
     )
 
     model_created_sensor >> sample
