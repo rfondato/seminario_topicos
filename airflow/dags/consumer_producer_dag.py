@@ -14,7 +14,7 @@ with DAG('create-consumer-producer',
           default_args=default_args,
           max_active_runs=1,
           catchup=False,
-          schedule_interval='0 2 * * *') as dag:
+          schedule_interval='*/10 * * * *') as dag:
     
     model_created_sensor = FileSensor(
         task_id='check_model',

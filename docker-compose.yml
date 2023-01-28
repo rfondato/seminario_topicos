@@ -23,7 +23,7 @@ services:
     container_name: worker1
     image: rfondato/pyspark:3.3.1
     restart: always
-    command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "2g", "--cores", "3"]
+    command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "3g", "--cores", "3"]
     environment:
       MASTER: spark://master:7077
       SPARK_NO_DAEMONIZE: 1
@@ -43,7 +43,7 @@ services:
     container_name: worker2
     image: rfondato/pyspark:3.3.1
     restart: always
-    command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "2g", "--cores", "3"]
+    command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077", "--memory", "3g", "--cores", "3"]
     environment:
       MASTER: spark://master:7077
       SPARK_NO_DAEMONIZE: 1
@@ -72,7 +72,6 @@ services:
     volumes:
       - ./notebook:/notebook
       - ./data:/data
-      - ./code:/app
 
   postgres-airflow:
       container_name: postgres-airflow
@@ -117,7 +116,6 @@ services:
     command: mlflow server --host 0.0.0.0
     volumes:
       - ./mlflow/mlruns:/mlruns
-      - ./mlflow/mlartifacts:/mlartifacts
 
   kafka:
     container_name: kafka

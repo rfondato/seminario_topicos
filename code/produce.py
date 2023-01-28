@@ -16,11 +16,8 @@ spark = (
     .getOrCreate()
 )
 
-    #.withColumn("value", F.encode(F.col("value"), "iso-8859-1").cast("binary"))\
-    #.withColumn("key", F.encode(F.col("key"), "iso-8859-1").cast("binary"))\
-
 # Read from real_time parquet table (which will be populated by sample) as a stream,
-# and write to the HAR kafka topic
+# and write to the HAR kafka topic, every 1 minute.
 load_stream(spark, '/data/real_time')\
     .withColumn("value", F.to_json(F.struct(F.col("*")) ) )\
     .withColumn("key", F.col("timestamp").cast("string"))\
@@ -29,6 +26,7 @@ load_stream(spark, '/data/real_time')\
     .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)\
     .option("topic", KAFKA_TOPIC)\
     .option("checkpointLocation", "/data/checkpoint/producer")\
+    .trigger(processingTime="1 minute")\
     .start()\
     .awaitTermination()
 

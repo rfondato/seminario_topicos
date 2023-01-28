@@ -11,7 +11,8 @@ from datetime import datetime
 
 findspark.init()
 
-PARTITIONS = 8
+CORES = 6
+PARTITIONS = CORES * 4
 
 spark = (
     SparkSession.builder
@@ -19,7 +20,7 @@ spark = (
     .getOrCreate()
 )
 
-# Load the test partition.  We will reduce partitions up to the number of cores we have available.
+# Load the test partition.  We will reduce partitions up to PARTITIONS value.
 test = load_partitioned_data(spark, '/data/partitioned/testing', PARTITIONS)
 
 # Load the trained model

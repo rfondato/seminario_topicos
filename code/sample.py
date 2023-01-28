@@ -12,23 +12,24 @@ findspark.init()
 
 spark = (
     SparkSession.builder
-    .appName("TP Seminario HAR")
+    .appName("TP Seminario - Sample Data")
     .getOrCreate()
 )
 
-unlabeled_data = load_accelerometer_data(spark, '/data/WISDM_at_v2.0_unlabeled_raw.txt')
+# Take a really small random sample of the unlabeled data (0.1%)
+unlabeled_data = load_accelerometer_data(spark, '/data/WISDM_at_v2.0_unlabeled_raw.txt').sample(False, 0.001, seed=None)
+# Calculate now just 1 random column from the sampled data
 random_row = unlabeled_data.rdd.takeSample(False, 1, seed=None) 
+# Get the userId and timestamp
 userId = random_row[0][0]
 timestamp = random_row[0][2]
 
 # Data was sampled at 20hz, so 1 sample every 50 ms and timestamp is in ms, so this means 200 rows, which is 10 seconds 
 TIMESTAMP_RANGE = 10000
 
-# Using the random user Id and timestamp, take a range of 1 particular action to sample
+# Using the random user Id and timestamp, take a range of 1 particular action to sample (10 posterior seconds)
 to_predict = unlabeled_data\
     .filter((F.col("userid") == F.lit(userId)) & (F.lit(timestamp) <= F.col("timestamp")) & (F.col("timestamp") <= F.lit(timestamp + 10000)))\
-
-print("userId: ", userId, "timestamp: ", timestamp)
 
 # Append samples to parquet real_time data
 to_predict\
