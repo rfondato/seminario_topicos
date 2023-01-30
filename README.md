@@ -124,7 +124,7 @@ Este DAG sirve para samplear datos no etiquetados cada 5 minutos, lo que va a pe
 ![Sample DAG](./images/sample_dag.PNG "Sample DAG")
 
 * **check_model:** FileSensor. Este paso valida que exista un modelo entrenado (archivo /model/.created), antes de empezar a samplear ejemplos.
-* **sample:** BashOperator. Realiza un submit al nodo master de spark del archivo /app/sample.py, que lee el archivo **/data/WISDM_at_v2.0_unlabeled_raw.txt**, samplea una fila al azar (userId + timestamp), y luego extrae un rango de 10000 milisegundos (10 segundos) siguientes al sampleado, es decir 200 rows, y los inserta en formato parquet en **/data/real_time/**
+* **sample:** BashOperator. Realiza un submit al nodo master de spark del archivo /app/sample.py, que lee el archivo **/data/WISDM_at_v2.0_unlabeled_raw.txt**, samplea varias filas al azar (userId + timestamp), y por cada uno extrae un rango de 60000 milisegundos (1 minuto), 30 segundos anteriores y siguientes al timestamp sampleado, es decir 1200 rows, y los inserta en formato parquet en **/data/real_time/**
 
 ### **Create Consumer Producer (/airflow/dags/consumer_producer_dag.py):**
 
@@ -138,7 +138,7 @@ Posee la siguiente estructura:
 * **check_model:** FileSensor. Este paso valida que exista un modelo entrenado (archivo /model/.created), antes de crear productor y consumidor.
 * **check_realtime_data:** FileSensor. Valida que exista el archivo _SUCCESS en la carpeta /data/real_time, lo que significa que el sampleo fue realizado al menos una vez.
 * **create_producer**: BashOperator. Realiza un submit al nodo master de spark del archivo /app/produce.py, el cual lee en modo stream el contenido de la carpeta /data/real_time (en formato parquet) y lo introduce en un tópico de Kafka.
-* **create_consumer**: BashOperator. Paralelamente al paso anterior, se realiza un submit al nodo master de spark del archivo /app/consume.py, el cual lee en modo stream el tópico de kafka en micro batches (de 1 minuto) y procesa cada uno, cargando el modelo almacenado en /model/trained_pipeline y realizando predicciones sobre los datos entrantes, escribiendo en la carpeta /predictions/pred_batch_i las predicciones del batch i (userId, timestamp y acción predicha).
+* **create_consumer**: BashOperator. Paralelamente al paso anterior, se realiza un submit al nodo master de spark del archivo /app/consume.py, el cual lee en modo stream el tópico de kafka en micro batches (de 5 minutos) y procesa cada uno, cargando el modelo almacenado en /model/trained_pipeline y realizando predicciones sobre los datos entrantes, escribiendo en la carpeta /predictions/pred_batch_i las predicciones del batch i (userId, timestamp y acción predicha).
 
 <br />
 
