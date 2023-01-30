@@ -16,26 +16,31 @@ spark = (
     .getOrCreate()
 )
 
-# Take a really small random sample of the unlabeled data (0.1%)
-unlabeled_data = load_accelerometer_data(spark, '/data/WISDM_at_v2.0_unlabeled_raw.txt').sample(False, 0.001, seed=None)
-# Calculate now just 1 random column from the sampled data
-random_row = unlabeled_data.rdd.takeSample(False, 1, seed=None) 
-# Get the userId and timestamp
-userId = random_row[0][0]
-timestamp = random_row[0][2]
+# Load the unlabeled data
+unlabeled_data = load_accelerometer_data(spark, '/data/WISDM_at_v2.0_unlabeled_raw.txt')
 
-# Data was sampled at 20hz, so 1 sample every 50 ms and timestamp is in ms, so this means 200 rows, which is 10 seconds 
-TIMESTAMP_RANGE = 10000
+SAMPLES = 5
 
-# Using the random user Id and timestamp, take a range of 1 particular action to sample (10 posterior seconds)
-to_predict = unlabeled_data\
-    .filter((F.col("userid") == F.lit(userId)) & (F.lit(timestamp) <= F.col("timestamp")) & (F.col("timestamp") <= F.lit(timestamp + TIMESTAMP_RANGE)))
+# Pick a number of samples from it.
+samples = unlabeled_data.rdd.takeSample(False, SAMPLES, seed=None) 
 
-# Append samples to parquet real_time data
-to_predict\
-    .write\
-    .option("header", True)\
-    .mode("append")\
-    .parquet('/data/real_time')
+for s in samples:
+    # Get the userId and timestamp
+    userId = s[0]
+    timestamp = s[2]
+
+    # Data was sampled at 20hz, so 1 sample every 50 ms and timestamp is in ms, then this means 1 minute = 1200 rows
+    TIMESTAMP_RANGE = 60000
+
+    # Using the random user Id and timestamp, take a range of 1 particular action to sample (-30 seconds to +30 seconds)
+    to_predict = unlabeled_data\
+        .filter((F.col("userid") == F.lit(userId)) & (F.lit(timestamp - TIMESTAMP_RANGE / 2) <= F.col("timestamp")) & (F.col("timestamp") <= F.lit(timestamp + TIMESTAMP_RANGE / 2)))
+
+    # Append samples to parquet real_time data
+    to_predict\
+        .write\
+        .option("header", True)\
+        .mode("append")\
+        .parquet('/data/real_time')
 
 # %%

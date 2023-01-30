@@ -17,7 +17,7 @@ spark = (
 )
 
 # Read from real_time parquet table (which will be populated by sample) as a stream,
-# and write to the HAR kafka topic, every 1 minute.
+# and write to the HAR kafka topic, every 5 minutes.
 load_stream(spark, '/data/real_time')\
     .withColumn("value", F.to_json(F.struct(F.col("*")) ) )\
     .withColumn("key", F.col("timestamp").cast("string"))\
@@ -26,7 +26,7 @@ load_stream(spark, '/data/real_time')\
     .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)\
     .option("topic", KAFKA_TOPIC)\
     .option("checkpointLocation", "/data/checkpoint/producer")\
-    .trigger(processingTime="1 minute")\
+    .trigger(processingTime="5 minutes")\
     .start()\
     .awaitTermination()
 

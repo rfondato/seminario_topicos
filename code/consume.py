@@ -46,7 +46,7 @@ output_path = "/data/predictions/"
 realtime_df = json_content.select("content.*")
 
 # Use the model to transform the realtime data and get the predictions
-# Process micro-batches of 1 minute
+# Process micro-batches of 5 minutes
 
 def process_batch(batch_df, batch_id):
 
@@ -63,7 +63,7 @@ def process_batch(batch_df, batch_id):
 realtime_df\
     .writeStream \
     .option("checkpointLocation", checkpoint_path)\
-    .trigger(processingTime="1 minute")\
+    .trigger(processingTime="5 minutes")\
     .foreachBatch(process_batch)\
     .start()\
     .awaitTermination()\
